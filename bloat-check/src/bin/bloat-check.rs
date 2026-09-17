@@ -58,7 +58,7 @@ use embassy_executor::Executor;
 use esp_rtos::embassy::Executor;
 
 use rs_matter::crypto::backend::rustcrypto::RustCrypto;
-use rs_matter::crypto::{Crypto, RngCore, WeakTestOnlyRand};
+use rs_matter::crypto::{Crypto, Rng, WeakTestOnlyRand};
 use rs_matter::dm::clusters::app::on_off::NoLevelControl;
 use rs_matter::dm::clusters::app::on_off::{self, test::TestOnOffDeviceLogic, OnOffHooks};
 use rs_matter::dm::clusters::desc::{self, ClusterHandler as _, DescHandler};
@@ -76,7 +76,7 @@ use rs_matter::dm::networks::wireless::{
     NetCtlState, NetCtlStateMutex, NetCtlWithStatusImpl, WifiNetworks,
 };
 use rs_matter::dm::networks::NetChangeNotif;
-use rs_matter::dm::{Async, Dataver, Endpoint, EpClMatcher, Node};
+use rs_matter::dm::{Async, Dataver, Endpoint, FnMatcher, Node};
 use rs_matter::error::Error;
 use rs_matter::im::{InteractionModel, WirelessInteractionModelState};
 use rs_matter::pairing::qr::QrTextType;
@@ -189,8 +189,8 @@ impl<'a> MatterStack<'a> {
 type AppNetCtl<'a> = NetCtlWithStatusImpl<'a, FakeWifi>;
 type AppTransport<'a> = ChainedNetwork<FakeUdp, &'a Btp, fn(&Address) -> bool>;
 type AppDmHandler<'a> = handler_chain_type!(
-    EpClMatcher => on_off::HandlerAsyncAdaptor<on_off::OnOffHandler<'a, TestOnOffDeviceLogic, NoLevelControl>>,
-    EpClMatcher => Async<desc::HandlerAdaptor<DescHandler<'a>>>
+    FnMatcher => on_off::HandlerAsyncAdaptor<on_off::OnOffHandler<'a, TestOnOffDeviceLogic, NoLevelControl>>,
+    FnMatcher => Async<desc::HandlerAdaptor<DescHandler<'a>>>
     | WifiSysHandler<'a, &'a AppNetCtl<'a>>
 );
 type AppCrypto = RustCrypto<'static, WeakTestOnlyRand>;
@@ -625,7 +625,7 @@ const NODE: Node<'static> = Node {
 /// The Data Model handler for our Matter device.
 /// The handler is the root endpoint 0 handler plus the on-off handler and its descriptor.
 fn data_model<'a>(
-    mut rand: impl RngCore + Copy,
+    mut rand: impl Rng + Copy,
     on_off: on_off::OnOffHandler<'a, TestOnOffDeviceLogic, NoLevelControl>,
     wifi_diag: &'a dyn WifiDiag,
     net_ctl: &'a AppNetCtl,
@@ -633,11 +633,11 @@ fn data_model<'a>(
     endpoints::WifiSysHandlerBuilder::new(net_ctl, wifi_diag)
         .build(rand)
         .chain(
-            EpClMatcher::new(Some(1), Some(desc::DescHandler::CLUSTER.id)),
+            |e, c| e == 1 && c == desc::DescHandler::CLUSTER.id,
             Async(desc::DescHandler::new(Dataver::new_rand(&mut rand)).adapt()),
         )
         .chain(
-            EpClMatcher::new(Some(1), Some(TestOnOffDeviceLogic::CLUSTER.id)),
+            |e, c| e == 1 && c == TestOnOffDeviceLogic::CLUSTER.id,
             on_off::HandlerAsyncAdaptor(on_off),
         )
 }

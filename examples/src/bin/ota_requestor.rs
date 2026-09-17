@@ -36,7 +36,7 @@ use embassy_time::{Duration, Timer};
 
 use log::{info, warn};
 
-use rand::RngCore;
+use rand::Rng;
 
 use rs_matter::bdx::BdxDownloadInitiator;
 use rs_matter::crypto::{default_crypto, Crypto};
@@ -50,7 +50,7 @@ use rs_matter::dm::devices::DEV_TYPE_OTA_REQUESTOR;
 use rs_matter::dm::endpoints;
 use rs_matter::dm::networks::eth::EthNetwork;
 use rs_matter::dm::networks::SysNetifs;
-use rs_matter::dm::{Async, AttrChangeNotifier, DataModel, Dataver, Endpoint, EpClMatcher, Node};
+use rs_matter::dm::{Async, AttrChangeNotifier, DataModel, Dataver, Endpoint, Node};
 use rs_matter::error::{Error, ErrorCode};
 use rs_matter::im::{EthInteractionModelState, InteractionModel};
 use rs_matter::pairing::qr::QrTextType;
@@ -108,7 +108,7 @@ fn main() -> Result<(), Error> {
     // Re-hydrate persisted state.
     matter.startup(&kv)?;
 
-    let crypto = default_crypto(rand::thread_rng(), DAC_PRIVKEY);
+    let crypto = default_crypto(rand::rng(), DAC_PRIVKEY);
 
     let rand = crypto.rand()?;
 
@@ -170,7 +170,7 @@ const NODE: Node<'static> = Node {
 /// The Data Model handler: the root endpoint 0 handler plus the OTA Requestor
 /// cluster (and its descriptor) on endpoint 1.
 fn data_model<'a>(
-    mut rand: impl RngCore + Copy,
+    mut rand: impl Rng + Copy,
     providers: &'a Providers,
     ota_state: &'a OtaState,
 ) -> impl DataModel + 'a {
@@ -180,11 +180,11 @@ fn data_model<'a>(
             .netif_diag(&SysNetifs)
             .build(rand)
             .chain(
-                EpClMatcher::new(Some(1), Some(desc::DescHandler::CLUSTER.id)),
+                |e, c| e == 1 && c == desc::DescHandler::CLUSTER.id,
                 Async(desc::DescHandler::new(Dataver::new_rand(&mut rand)).adapt()),
             )
             .chain(
-                EpClMatcher::new(Some(1), Some(OtaRequestorHandler::CLUSTER.id)),
+                |e, c| e == 1 && c == OtaRequestorHandler::CLUSTER.id,
                 Async(
                     OtaRequestorHandler::new(Dataver::new_rand(&mut rand), providers, ota_state)
                         .adapt(),

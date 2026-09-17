@@ -928,6 +928,11 @@ impl Fabric {
         Ok(())
     }
 
+    /// Return the ACL entries of the fabric
+    pub fn acl(&self) -> &[AclEntry] {
+        &self.acl
+    }
+
     /// Return an iterator over the ACL entries of the fabric
     pub fn acl_iter(&self) -> impl Iterator<Item = &AclEntry> {
         self.acl.iter()
@@ -1122,7 +1127,7 @@ impl Fabrics {
     }
 
     /// Remove all fabrics
-    pub fn reset(&mut self) {
+    pub(crate) fn reset(&mut self) {
         self.fabrics.clear();
     }
 
@@ -1131,7 +1136,7 @@ impl Fabrics {
     /// # Arguments
     /// - `store`: the BLOB store to remove the fabrics from
     /// - `buf`: a temporary buffer to use for removing the fabrics
-    pub fn reset_persist<S: KvBlobStore>(
+    pub(crate) fn reset_persist<S: KvBlobStore>(
         &mut self,
         mut store: S,
         buf: &mut [u8],
@@ -1152,7 +1157,7 @@ impl Fabrics {
     /// # Arguments
     /// - `store`: the BLOB store to load the fabrics from
     /// - `buf`: a temporary buffer to use for loading the fabrics
-    pub fn load_persist<S: KvBlobStore>(
+    pub(crate) fn load_persist<S: KvBlobStore>(
         &mut self,
         mut store: S,
         buf: &mut [u8],
@@ -1256,6 +1261,46 @@ impl Fabrics {
                 Some(vendor_id),
                 Some(case_admin_subject),
             )
+        })
+    }
+
+    /// Add a new fabric with an explicit ACL instead of the single admin entry
+    /// [`Fabrics::add`] seeds.
+    ///
+    /// If this operation succeeds, the fabric immediately becomes operational.
+    #[allow(clippy::too_many_arguments)]
+    pub fn add_with_acl<C, I>(
+        &mut self,
+        crypto: C,
+        secret_key: CanonPkcSecretKeyRef<'_>,
+        root_ca: &[u8],
+        noc: &[u8],
+        icac: &[u8],
+        epoch_key: Option<CanonAeadKeyRef<'_>>,
+        vendor_id: u16,
+        acl: I,
+    ) -> Result<&mut Fabric, Error>
+    where
+        C: Crypto,
+        I: IntoIterator<Item = Result<AclEntry, Error>>,
+    {
+        self.add_with_post_init(|fabric| {
+            fabric.update(
+                crypto,
+                Some(root_ca),
+                noc,
+                icac,
+                secret_key,
+                epoch_key,
+                Some(vendor_id),
+                None,
+            )?;
+
+            for entry in acl {
+                fabric.acl_add(entry?)?;
+            }
+
+            Ok(())
         })
     }
 
@@ -1409,7 +1454,7 @@ where
     }
 
     /// Return a reference to the underlying `Persist` instance.
-    pub fn persist_mut(&mut self) -> &mut Persist<S> {
+    pub(crate) fn persist_mut(&mut self) -> &mut Persist<S> {
         &mut self.0
     }
 
