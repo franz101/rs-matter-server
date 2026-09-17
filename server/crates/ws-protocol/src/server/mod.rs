@@ -33,6 +33,10 @@ pub struct ServerConfig {
     /// `--default-fabric-label` / env pin: when set, `set_default_fabric_label` is a permanent
     /// silent no-op (WIRE_PROTOCOL.md §11).
     pub default_fabric_label: Option<String>,
+    /// `--custom-cluster-poll-interval` (matterjs-server #1002). Seconds, 60..=86400.
+    /// Custom-cluster polling itself is not implemented yet; the value is accepted and stored
+    /// so HA/CLI flags match 1:1.
+    pub custom_cluster_poll_interval_secs: u64,
 }
 
 struct FabricLabelState {
@@ -78,6 +82,10 @@ impl Server {
         if let Some(pin) = &config.default_fabric_label {
             creds.fabric_label = Some(pin.clone());
         }
+        tracing::debug!(
+            secs = config.custom_cluster_poll_interval_secs,
+            "custom cluster poll interval (Eve-style poller not implemented yet)"
+        );
         let server = Arc::new(Self {
             backend,
             names,
@@ -121,6 +129,19 @@ impl Server {
     /// with the wire-correct code (WIRE_PROTOCOL.md §1).
     pub async fn handle(&self, conn: &Connection, req: &Request) -> Result<Json, ServerError> {
         commands::dispatch(self, conn, req).await
+    }
+
+    /// Number of commissioned nodes in the interview cache (WIRE_PROTOCOL.md §25 `node_count`).
+    pub async fn node_count(&self) -> usize {
+        self.nodes.read().await.len()
+    }
+
+    /// `GET /health` body: `{"version": "<server version>", "node_count": <n>}`.
+    pub async fn health_json(&self, version: &str) -> Json {
+        serde_json::json!({
+            "version": version,
+            "node_count": self.node_count().await,
+        })
     }
 }
 
@@ -243,6 +264,7 @@ mod tests {
                 sdk_version: "test/0.0.0".into(),
                 storage_dir: dir.to_path_buf(),
                 default_fabric_label: None,
+                custom_cluster_poll_interval_secs: 60,
             },
             Arc::new(NoLogControl),
         )

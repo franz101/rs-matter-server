@@ -45,8 +45,8 @@ Do not skip the verification step; do not widen a task's scope.
 matter-fast/
   PLAN.md                     this file
   docs/WIRE_PROTOCOL.md       exact JSON contracts extracted from the TS source (task T1)
-  rs-matter/                  git checkout of project-chip/rs-matter (pin: 3a27068, 2026-09-03)
-  matterjs-server/            git checkout of matter-js/matterjs-server v1.4.1-alpha.2 (reference + test client)
+  rs-matter/                  git checkout of project-chip/rs-matter (pin: b6a708f / v0.4.0, 2026-09-14)
+  matterjs-server/            git checkout of matter-js/matterjs-server v1.4.1-alpha.5 (reference + test client)
   server/                     NEW cargo workspace (everything we write)
     Cargo.toml                [workspace] members = crates/*
     crates/ws-protocol/       wire types, error codes, path parsing, JSON value model, Backend trait
@@ -334,18 +334,14 @@ app + this server, appears as a light in HA, toggles from HA, and HA sees state
 changes made at the lamp within a few seconds — on the Pi, from a cold restart
 of the container (persistence works).
 
-### T8 - `/health` body parity  [Sonnet, small]
-`GET /health` must return `{"version": "<server version>", "node_count": <n>}`
-(WIRE_PROTOCOL.md §25, measured against matter-server 1.4.0), not the literal
-`ok`. `version` should be our own version string; `node_count` is the number of
-commissioned nodes known to the backend. Update the container HEALTHCHECK only
-if it stops passing (it checks the status code, not the body), and extend the
-ws_smoke test to assert the JSON shape.
+### T8 - `/health` body parity  [DONE 2026-09-17]
+`GET /health` returns `{"version": "<server version>", "node_count": <n>}`
+(WIRE_PROTOCOL.md §25). `ws_smoke` asserts the JSON shape.
 
 ## 5. Milestone 2 — `backend-rsm` on official rs-matter
 
 Everything below is verified against the checkout at `./rs-matter`
-(commit 3a27068). Read these first, in order:
+(commit b6a708f, v0.4.0). Read these first, in order:
 
 - `rs-matter/tests/src/bin/commissioner_tests.rs` — the canonical controller
   wiring: `Matter::init` + `matter.run(&crypto, &socket, &socket, NoNetwork)`
@@ -472,9 +468,9 @@ package; embedded/no_std builds of the server.
 
 ## 8. Working agreements for subagents
 
-- Verified crate/API facts in this file were read from source on 2026-09-03;
-  if a signature differs when you build, trust the compiler and update this
-  file in the same change.
+- Verified crate/API facts in this file were last re-checked against rs-matter
+  v0.4.0 (2026-09-17) and matterjs-server v1.4.1-alpha.5; if a signature differs
+  when you build, trust the compiler and update this file in the same change.
 - `cargo fmt`, `cargo clippy --workspace -D warnings`, `cargo test --workspace`
   before reporting done. Conformance suite (T5) for anything touching wire
   shapes.

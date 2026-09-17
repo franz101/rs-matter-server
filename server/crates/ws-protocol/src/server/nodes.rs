@@ -475,6 +475,7 @@ mod tests {
                 sdk_version: "test/0.0.0".into(),
                 storage_dir: dir.clone(),
                 default_fabric_label: None,
+                custom_cluster_poll_interval_secs: 60,
             },
             Arc::new(NoLogControl),
         );

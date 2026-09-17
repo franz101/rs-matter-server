@@ -16,7 +16,8 @@ use tracing_subscriber::util::SubscriberInitExt;
 
 use ws_protocol::backend::FabricSummary;
 use ws_protocol::{
-    ErrorResponse, MatterNames, MockBackend, Request, Server, ServerConfig, SuccessResponse,
+    redact_sensitive_command_fields, ErrorResponse, MatterNames, MockBackend, Request, Server,
+    ServerConfig, SuccessResponse,
 };
 
 /// Fixed controller node id for the mock backend's single-fabric setup (PLAN.md §5 R1 uses the
@@ -58,6 +59,27 @@ struct Cli {
     /// `paa_roots_dir` -- both or neither.
     #[arg(long, env = "CD_ROOTS_DIR")]
     cd_roots_dir: Option<PathBuf>,
+    /// Interval in seconds for polling custom cluster attributes that do not support
+    /// subscriptions (legacy Eve Energy). matterjs-server #1002; range 60..=86400.
+    #[arg(
+        long,
+        env = "CUSTOM_CLUSTER_POLL_INTERVAL",
+        default_value_t = 60,
+        value_parser = parse_custom_cluster_poll_interval
+    )]
+    custom_cluster_poll_interval: u64,
+}
+
+fn parse_custom_cluster_poll_interval(s: &str) -> Result<u64, String> {
+    let parsed: u64 = s
+        .parse()
+        .map_err(|_| format!("not an integer: {s}"))?;
+    if !(60..=86_400).contains(&parsed) {
+        return Err(format!(
+            "value must be between 60 and 86400 seconds, got: {s}"
+        ));
+    }
+    Ok(parsed)
 }
 
 fn expand_tilde(path: &str) -> PathBuf {
@@ -142,6 +164,7 @@ async fn main() -> anyhow::Result<()> {
             sdk_version,
             storage_dir: storage_path,
             default_fabric_label: cli.default_fabric_label,
+            custom_cluster_poll_interval_secs: cli.custom_cluster_poll_interval,
         },
         Arc::new(TracingLogControl(reload_handle)),
     );
@@ -154,7 +177,10 @@ async fn main() -> anyhow::Result<()> {
     .parse()
     .map_err(|e| anyhow::anyhow!("bad listen address: {e}"))?;
     let listener = TcpListener::bind(bind).await?;
-    info!("matter-server listening on {bind} (/ws, /health, POST /ota-upload/<id>)");
+    info!(
+        custom_cluster_poll_interval_secs = cli.custom_cluster_poll_interval,
+        "matter-server listening on {bind} (/ws, /health, POST /ota-upload/<id>)"
+    );
 
     loop {
         let (stream, peer) = listener.accept().await?;
@@ -200,9 +226,10 @@ async fn serve_with_head(
     let mut stream = stream;
 
     if request_line.starts_with("GET /health") {
-        let body = "ok";
+        let version = env!("CARGO_PKG_VERSION");
+        let body = server.health_json(version).await.to_string();
         let resp = format!(
-            "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\n{}",
+            "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n{}",
             body.len(),
             body
         );
@@ -327,6 +354,14 @@ where
                 let text = msg.to_text()?;
                 match serde_json::from_str::<Request>(text) {
                     Ok(req) => {
+                        if tracing::enabled!(tracing::Level::DEBUG) {
+                            if let Ok(raw) = serde_json::to_value(&req) {
+                                tracing::debug!(
+                                    request = %redact_sensitive_command_fields(&raw),
+                                    "WebSocket request"
+                                );
+                            }
+                        }
                         let server = Arc::clone(&server);
                         let conn = conn.clone_for_task();
                         let tx = tx.clone();

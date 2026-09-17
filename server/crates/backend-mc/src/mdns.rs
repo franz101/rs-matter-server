@@ -21,7 +21,8 @@
 use std::net::IpAddr;
 use std::time::Duration;
 
-use ws_protocol::backend::CommissionableNode;
+use ws_protocol::backend::{CommissionableNode, DiscoveryFilter};
+use ws_protocol::ServerError;
 
 const COMMISSIONABLE_SERVICE: &str = "_matterc._udp.local.";
 const OPERATIONAL_SERVICE: &str = "_matter._tcp.local.";
@@ -165,5 +166,92 @@ fn commissionable_node_from_service_info(info: &mdns_sd::ServiceInfo) -> Commiss
         supports_tcp: txt("T").map(|v| v != "0"),
         addresses: info.get_addresses().iter().map(IpAddr::to_string).collect(),
         rotating_id: txt("RI"),
+    }
+}
+
+/// Pick the 12-bit long discriminator HA's `commission_on_network` needs so we can
+/// build a manual pairing code. The Android companion app sends `filter_type` 0
+/// (no filter) plus the setup PIN — WIRE_PROTOCOL.md §9. Without this, that path
+/// hard-failed and the app showed "something went wrong" after the phone had
+/// already joined the lamp to Thread.
+pub fn discriminator_for_filter(
+    filter: DiscoveryFilter,
+    found: &[CommissionableNode],
+) -> Result<u16, ServerError> {
+    let matches: Vec<u16> = found
+        .iter()
+        .filter_map(|n| {
+            let d = n.long_discriminator?;
+            let ok = match filter {
+                DiscoveryFilter::None => true,
+                DiscoveryFilter::LongDiscriminator(want) => d == want,
+                DiscoveryFilter::ShortDiscriminator(short) => (d >> 8) == short,
+                DiscoveryFilter::VendorId(vid) => n.vendor_id == Some(vid),
+            };
+            ok.then_some(d)
+        })
+        .collect();
+    let mut unique = matches;
+    unique.sort_unstable();
+    unique.dedup();
+    match unique.as_slice() {
+        [one] => Ok(*one),
+        [] => Err(ServerError::node_not_resolving(
+            "commission_on_network: no commissionable Matter device on the LAN \
+             (mDNS _matterc._udp). Put the lamp in pairing mode (IKEA: 6× power cycle) \
+             and keep it next to the Thread border router.",
+        )),
+        many => Err(ServerError::invalid_arguments(format!(
+            "commission_on_network: {} commissionable devices on the LAN with \
+             different discriminators; power extra devices off or pass filter_type 2",
+            many.len()
+        ))),
+    }
+}
+
+#[cfg(test)]
+mod discriminator_tests {
+    use super::*;
+
+    fn node(d: u16, vid: Option<u16>) -> CommissionableNode {
+        CommissionableNode {
+            long_discriminator: Some(d),
+            vendor_id: vid,
+            ..CommissionableNode::default()
+        }
+    }
+
+    #[test]
+    fn none_filter_single_device() {
+        let found = [node(3840, Some(0x1187))];
+        assert_eq!(
+            discriminator_for_filter(DiscoveryFilter::None, &found).unwrap(),
+            3840
+        );
+    }
+
+    #[test]
+    fn none_filter_empty_is_not_resolving() {
+        let err = discriminator_for_filter(DiscoveryFilter::None, &[]).unwrap_err();
+        assert_eq!(u16::from(err.code), 4);
+    }
+
+    #[test]
+    fn short_discriminator_matches_high_nibble() {
+        let found = [node(3840, None), node(100, None)];
+        assert_eq!(
+            discriminator_for_filter(DiscoveryFilter::ShortDiscriminator(3840 >> 8), &found)
+                .unwrap(),
+            3840
+        );
+    }
+
+    #[test]
+    fn vendor_id_filter() {
+        let found = [node(1, Some(0x1187)), node(2, Some(0x115F))];
+        assert_eq!(
+            discriminator_for_filter(DiscoveryFilter::VendorId(0x1187), &found).unwrap(),
+            1
+        );
     }
 }

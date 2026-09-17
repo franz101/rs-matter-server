@@ -15,8 +15,11 @@ use std::fmt::Write as _;
 use std::path::PathBuf;
 
 /// IDL revision the checked-in table is generated from (PLAN.md T3).
+pub const IDL_FILE: &str = "src/idl/parser/controller-clusters-V1.5.1.0.matter";
+
+/// Printed into generated.rs so a reader can see which tree produced the table.
 pub const IDL_RELATIVE_PATH: &str =
-    "rs-matter/rs-matter-codegen/src/idl/parser/controller-clusters-V1.5.1.0.matter";
+    "rs-matter-codegen/src/idl/parser/controller-clusters-V1.5.1.0.matter";
 
 /// This crate's directory, with symlinks resolved so a build from a linked
 /// workspace still finds the repository above it.
@@ -26,9 +29,23 @@ fn manifest_dir() -> PathBuf {
 }
 
 /// Absolute path of the IDL inside this repository checkout.
+///
+/// Two layouts exist:
+/// - `franz101/rs-matter-server`: `server/` lives in the rs-matter git root, so
+///   codegen is `../../../rs-matter-codegen`.
+/// - `matter-fast/server`: `server/` is a sibling of a full `rs-matter/` checkout.
 pub fn idl_path() -> PathBuf {
-    // <repo>/server/crates/matter-names -> <repo>
-    manifest_dir().join("../../..").join(IDL_RELATIVE_PATH)
+    let repo = manifest_dir().join("../../..");
+    let candidates = [
+        repo.join("rs-matter-codegen").join(IDL_FILE),
+        repo.join("rs-matter/rs-matter-codegen").join(IDL_FILE),
+    ];
+    candidates
+        .into_iter()
+        .find(|p| p.is_file())
+        .unwrap_or_else(|| {
+            repo.join("rs-matter-codegen").join(IDL_FILE)
+        })
 }
 
 /// Path of the checked-in `generated.rs`.

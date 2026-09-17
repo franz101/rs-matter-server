@@ -1,6 +1,6 @@
 # WebSocket wire protocol — exact spec extracted from the matterjs-server TypeScript
 
-Source of truth: `matterjs-server` v1.4.1-alpha.2 (commit 1e489f4). Read from:
+Source of truth: `matterjs-server` v1.4.1-alpha.5 (commit 071b2a0 / e8344d1). Read from:
 
 - `packages/ws-controller/src/server/WebSocketControllerHandler.ts` (WSH)
 - `packages/ws-controller/src/controller/ControllerCommandHandler.ts` (CCH)
@@ -457,7 +457,7 @@ schema-driven parts (bitmap/epoch conversion, wire-field-name struct fallback) n
   or the backend itself for epoch attributes it recognizes) can apply these on top of the raw
   `MValue` this crate produces; nothing here blocks that.
 
-## 25. GET /health (measured 2026-09-04, not from source)
+## 25. GET /health (matterjs-server, measured 2026-09-04, rechecked 2026-09-17)
 
 matterjs-server answers `GET /health` with a JSON body, not a plain string:
 
@@ -468,8 +468,6 @@ matterjs-server answers `GET /health` with a JSON body, not a plain string:
 Observed against `matter-server` 1.4.0 running from the compiled-Bun image
 (`--disable-dashboard --disable-dcl-seed`), idle with no commissioned nodes.
 `version` is the server version string; `node_count` is the number of
-commissioned nodes.
+commissioned nodes. `Content-Type` is `application/json`.
 
-Our Rust server currently returns the literal `ok`. Nothing in Home Assistant
-depends on this body (the container HEALTHCHECK only checks the status code),
-but it is a 1:1 gap — see PLAN.md.
+This crate returns the same shape (`version` = our cargo package version).

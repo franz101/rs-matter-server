@@ -67,8 +67,11 @@ async fn wait_for_health(port: u16) {
             let mut buf = Vec::new();
             let _ = stream.read_to_end(&mut buf).await;
             let text = String::from_utf8_lossy(&buf);
-            if text.contains("200 OK") && text.trim_end().ends_with("ok") {
-                return;
+            if let Some(idx) = text.find("\r\n\r\n") {
+                let body = text[idx + 4..].trim();
+                if text.contains("200 OK") && body.starts_with('{') && body.contains("node_count") {
+                    return;
+                }
             }
         }
         tokio::time::sleep(Duration::from_millis(100)).await;
@@ -134,6 +137,24 @@ async fn ws_smoke() {
     );
 
     wait_for_health(port).await;
+
+    // WIRE_PROTOCOL.md §25 / matterjs-server: {"version":"...","node_count":N}
+    {
+        let mut stream = tokio::net::TcpStream::connect(("127.0.0.1", port))
+            .await
+            .expect("health connect");
+        stream
+            .write_all(b"GET /health HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n")
+            .await
+            .unwrap();
+        let mut buf = Vec::new();
+        stream.read_to_end(&mut buf).await.unwrap();
+        let text = String::from_utf8_lossy(&buf);
+        let body = text.split("\r\n\r\n").nth(1).unwrap_or("").trim();
+        let health: Json = serde_json::from_str(body).expect("health json");
+        assert_eq!(health["node_count"], 0);
+        assert!(health["version"].as_str().unwrap().contains('.'));
+    }
 
     let url = format!("ws://127.0.0.1:{port}/ws");
     let (mut ws, _) = tokio_tungstenite::connect_async(&url)

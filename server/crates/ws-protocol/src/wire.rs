@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value as Json;
 
 /// `{"message_id": string, "command": string, "args": {...}}`
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Request {
     pub message_id: String,
     pub command: String,

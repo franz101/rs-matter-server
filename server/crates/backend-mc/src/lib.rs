@@ -372,32 +372,32 @@ impl Backend for McBackend {
         if ip.is_some() {
             tracing::debug!(
                 "commission_on_network: ip_addr hint accepted but not honored -- \
-                 matter-controller 0.11's commission() has no address-hint parameter and always \
+                 matter-controller's commission() has no address-hint parameter and always \
                  resolves the device itself via mDNS"
             );
         }
-        let code = match filter {
-            DiscoveryFilter::LongDiscriminator(d) => manual_code::manual_code(pin, d, None)?,
-            DiscoveryFilter::None => {
-                return Err(ServerError::invalid_arguments(
-                    "commission_on_network requires filter_type 2 (long discriminator) in this \
-                     backend build; unfiltered/short-discriminator/vendor-id discovery is not \
-                     implemented",
-                ))
-            }
-            DiscoveryFilter::ShortDiscriminator(_) => {
-                return Err(ServerError::invalid_arguments(
-                    "commission_on_network: short-discriminator filtering (filter_type 1) is not \
-                     supported by this backend; pass filter_type 2 with the full long discriminator",
-                ))
-            }
-            DiscoveryFilter::VendorId(_) => {
-                return Err(ServerError::invalid_arguments(
-                    "commission_on_network: vendor-id filtering (filter_type 3) is not supported \
-                     by this backend; pass filter_type 2 with the long discriminator",
-                ))
+        // Android HA companion "Add Matter device" sends only the setup PIN
+        // (filter_type 0). Discover `_matterc._udp` and build the 11-digit
+        // manual code from the advertised long discriminator.
+        let disc = match filter {
+            DiscoveryFilter::LongDiscriminator(d) => d,
+            other => {
+                tracing::info!(
+                    "commission_on_network: browsing _matterc._udp for filter {other:?}"
+                );
+                let found = mdns::discover_commissionable(Duration::from_secs(8)).await;
+                tracing::info!(
+                    count = found.len(),
+                    "commission_on_network: commissionable mDNS results"
+                );
+                mdns::discriminator_for_filter(other, &found)?
             }
         };
+        let code = manual_code::manual_code(pin, disc, None)?;
+        tracing::info!(
+            discriminator = disc,
+            "commission_on_network: commissioning with constructed manual code"
+        );
         let info = errors::with_timeout(
             errors::COMMISSION_TIMEOUT,
             "commission_on_network",

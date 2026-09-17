@@ -272,6 +272,7 @@ mod tests {
                 sdk_version: "test/0.0.0".into(),
                 storage_dir: dir.to_path_buf(),
                 default_fabric_label: None,
+                custom_cluster_poll_interval_secs: 60,
             },
             std::sync::Arc::new(crate::server::NoLogControl),
         );

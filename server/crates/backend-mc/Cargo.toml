@@ -9,17 +9,17 @@ description = "ws-protocol::Backend implementation on the third-party matter-con
 ws-protocol = { path = "../ws-protocol" }
 # Pinned to the same versions matter-rs/Cargo.toml (the prototype this crate ports) uses, per
 # PLAN.md T4 -- verified to build offline against the registry cache on this machine.
-matter-controller = "0.11"
-matter-codec = "0.3"
+matter-controller = "0.14"
+matter-codec = "0.3.1"
 # Not a matter-controller dependency of ours transitively re-exported: matter-controller keeps
 # the fabric's root signing key fully internal (no public accessor), so deriving our own
 # spec-correct compressed_fabric_id (Matter Core Spec 4.3.2.2) needs this crate directly -- see
 # `fabric_identity.rs`.
-matter-crypto = "0.3"
+matter-crypto = "0.5"
 # Only used for `matter_commissioning::setup::{encode_manual_code, Discriminator, Passcode,
 # SetupPayload, ...}` -- delegating to the exact Verhoeff/packing implementation the rest of the
 # stack already trusts, rather than re-deriving it, per `manual_code.rs`.
-matter-commissioning = "0.7"
+matter-commissioning = "0.10"
 mdns-sd = "0.13"
 serde = { workspace = true }
 serde_json = { workspace = true }

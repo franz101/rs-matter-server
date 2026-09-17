@@ -90,6 +90,13 @@ Verified:
 - Deployed and healthy on a Raspberry Pi Zero 2 W alongside Home Assistant;
   HA connects, subscribes and stays connected. mDNS discovery of real
   commissionable devices on the LAN works.
+- `GET /health` returns `{"version","node_count"}` like matterjs-server.
+- `commission_on_network` with `filter_type` 0 (HA Android companion) resolves
+  the long discriminator via `_matterc._udp` instead of rejecting the call.
+- Debug logs redact door PINs / credential payloads (matterjs-server #1031).
+- CLI `--custom-cluster-poll-interval` / `CUSTOM_CLUSTER_POLL_INTERVAL` is
+  accepted (60..=86400s, matterjs-server #1002); Eve custom-cluster polling
+  itself is still not implemented.
 
 Not yet working:
 
@@ -106,7 +113,6 @@ Not yet working:
 - No BLE, and no Wi-Fi/Thread provisioning: a device must already be on the IP
   network. Commission it with a phone app first, then share it here through a
   commissioning window.
-- `/health` returns `ok` instead of matterjs-server's JSON body.
 
 `docs/PLAN.md` carries the full task breakdown and the remaining parity gaps.
 
