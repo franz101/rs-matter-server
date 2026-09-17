@@ -36,7 +36,7 @@ use embassy_futures::select::select3;
 
 use futures_lite::StreamExt;
 
-use rand::RngCore;
+use rand::Rng;
 
 use rs_matter::crypto::{default_crypto, Crypto};
 use rs_matter::dm::clusters::app::cam_av_settings::{
@@ -76,8 +76,8 @@ use rs_matter::dm::endpoints;
 use rs_matter::dm::networks::eth::EthNetwork;
 use rs_matter::dm::networks::SysNetifs;
 use rs_matter::dm::{
-    ArrayAttributeRead, Async, DataModel, Dataver, DeviceType, Endpoint, EpClMatcher,
-    InvokeContext, Node, ReadContext, WriteContext,
+    ArrayAttributeRead, Async, DataModel, Dataver, DeviceType, Endpoint, InvokeContext, Node,
+    ReadContext, WriteContext,
 };
 use rs_matter::error::{Error, ErrorCode};
 use rs_matter::im::EthInteractionModelState;
@@ -420,7 +420,7 @@ fn main() -> Result<(), Error> {
     // Re-hydrate the `Matter` instance (fabrics, basic info, RTC).
     matter.startup(&kv)?;
 
-    let crypto = default_crypto(rand::thread_rng(), DAC_PRIVKEY);
+    let crypto = default_crypto(rand::rng(), DAC_PRIVKEY);
     let mut rand = crypto.rand()?;
 
     const CAM_AV_STREAM_USAGES: &[StreamUsageEnum] = &[StreamUsageEnum::LiveView];
@@ -686,7 +686,7 @@ const NODE: Node<'static> = Node {
 // ---------------------------------------------------------------------------
 
 fn data_model<'a>(
-    mut rand: impl RngCore + Copy,
+    mut rand: impl Rng + Copy,
     webrtc: &'a WebRtc,
     cam_av: &'a CamAv,
     cam_av_settings: &'a CamAvSettingsHandler<
@@ -704,48 +704,43 @@ fn data_model<'a>(
             .netif_diag(&SysNetifs)
             .build(rand)
             .chain(
-                EpClMatcher::new(Some(1), Some(desc::DescHandler::CLUSTER.id)),
+                |e, c| e == 1 && c == desc::DescHandler::CLUSTER.id,
                 Async(desc::DescHandler::new(Dataver::new_rand(&mut rand)).adapt()),
             )
             .chain(
-                EpClMatcher::new(Some(1), Some(groups::GroupsHandler::CLUSTER.id)),
+                |e, c| e == 1 && c == groups::GroupsHandler::CLUSTER.id,
                 Async(groups::GroupsHandler::new(Dataver::new_rand(&mut rand)).adapt()),
             )
             .chain(
-                EpClMatcher::new(Some(1), Some(CamAv::CLUSTER_VIDEO_AUDIO.id)),
+                |e, c| e == 1 && c == CamAv::CLUSTER_VIDEO_AUDIO.id,
                 rs_matter::dm::clusters::app::cam_av_stream::HandlerAsyncAdaptor(cam_av),
             )
             .chain(
-                EpClMatcher::new(Some(1), Some(CLUSTER_DPTZ_ONLY.id)),
+                |e, c| e == 1 && c == CLUSTER_DPTZ_ONLY.id,
                 rs_matter::dm::clusters::app::cam_av_settings::HandlerAsyncAdaptor(cam_av_settings),
             )
             .chain(
-                EpClMatcher::new(
-                    Some(1),
-                    Some(ZoneMgmtHandler::<StubZoneHooks, ZONE_NZ, ZONE_NV, ZONE_NT>::CLUSTER.id),
-                ),
+                |e, c| {
+                    e == 1
+                        && c == ZoneMgmtHandler::<StubZoneHooks, ZONE_NZ, ZONE_NV, ZONE_NT>::CLUSTER
+                            .id
+                },
                 ZoneMgmtAdaptor(zone_mgmt),
             )
             .chain(
-                EpClMatcher::new(
-                    Some(1),
-                    Some(PushAvStreamHandler::<StubPushHooks, PUSH_NC>::CLUSTER.id),
-                ),
+                |e, c| e == 1 && c == PushAvStreamHandler::<StubPushHooks, PUSH_NC>::CLUSTER.id,
                 rs_matter::dm::clusters::app::push_av_stream::HandlerAsyncAdaptor(push_av),
             )
             .chain(
-                EpClMatcher::new(Some(1), Some(WebRtc::CLUSTER.id)),
+                |e, c| e == 1 && c == WebRtc::CLUSTER.id,
                 WebRtcAdaptor(webrtc),
             )
             .chain(
-                EpClMatcher::new(Some(1), Some(chime_decl::FULL_CLUSTER.id)),
+                |e, c| e == 1 && c == chime_decl::FULL_CLUSTER.id,
                 Async(ChimeHandlerAdaptor(chime)),
             )
             .chain(
-                EpClMatcher::new(
-                    Some(endpoints::ROOT_ENDPOINT_ID),
-                    Some(power_source::CLUSTER.id),
-                ),
+                |e, c| e == endpoints::ROOT_ENDPOINT_ID && c == power_source::CLUSTER.id,
                 Async(PowerSourceHandler::new(Dataver::new_rand(&mut rand), &POWER_SOURCE).adapt()),
             ),
     )

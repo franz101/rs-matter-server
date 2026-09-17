@@ -47,7 +47,7 @@ use embassy_time::{Duration, Timer};
 
 use log::{debug, info, warn};
 
-use rand_core::RngCore;
+use rand_core::Rng;
 
 use rs_matter::cert::gen::VALID_FOREVER;
 use rs_matter::cert::{MAX_CERT_TLV_AND_ASN1_LEN, MAX_CERT_TLV_LEN};
@@ -61,7 +61,7 @@ use rs_matter::dm::clusters::net_comm::DummyNetworks;
 use rs_matter::dm::devices::test::{TEST_DEV_ATT, TEST_DEV_COMM, TEST_DEV_DET};
 use rs_matter::dm::devices::DEV_TYPE_ON_OFF_LIGHT;
 use rs_matter::dm::networks::unix::UnixNetifs;
-use rs_matter::dm::{endpoints, Async, DataModel, Dataver, Endpoint, EpClMatcher, Node};
+use rs_matter::dm::{endpoints, Async, DataModel, Dataver, Endpoint, Node};
 use rs_matter::error::Error;
 use rs_matter::im::subscriptions::DEFAULT_MAX_SUBSCRIPTIONS;
 use rs_matter::im::IMStatusCode;
@@ -127,7 +127,7 @@ const NODE: Node<'static> = Node {
 };
 
 fn data_model<'a, OH: OnOffHooks, LH: LevelControlHooks>(
-    mut rand: impl RngCore + Copy,
+    mut rand: impl Rng + Copy,
     on_off: &'a on_off::OnOffHandler<'a, OH, LH>,
 ) -> impl DataModel + 'a {
     (
@@ -136,11 +136,11 @@ fn data_model<'a, OH: OnOffHooks, LH: LevelControlHooks>(
             .netif_diag(&UnixNetifs)
             .build(rand)
             .chain(
-                EpClMatcher::new(Some(1), Some(desc::DescHandler::CLUSTER.id)),
+                |e, c| e == 1 && c == desc::DescHandler::CLUSTER.id,
                 Async(desc::DescHandler::new(Dataver::new_rand(&mut rand)).adapt()),
             )
             .chain(
-                EpClMatcher::new(Some(1), Some(TestOnOffDeviceLogic::CLUSTER.id)),
+                |e, c| e == 1 && c == TestOnOffDeviceLogic::CLUSTER.id,
                 on_off::HandlerAsyncAdaptor(on_off),
             ),
     )

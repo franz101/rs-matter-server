@@ -72,7 +72,7 @@ pub use crate::persist::USER_LABELS_KEY;
 ///
 /// Exposed as a free constant so callers don't have to spell out the
 /// generic parameters of [`UserLabelHandler`] when they just want the
-/// cluster ID for an `EpClMatcher` or a `clusters!(...)` literal.
+/// cluster ID for a handler chain matcher or a `clusters!(...)` literal.
 pub const CLUSTER: Cluster<'static> = FULL_CLUSTER.with_attrs(with!(required));
 
 /// Maximum length of a single `label` string, in characters.
@@ -196,7 +196,7 @@ impl<const E: usize, const N: usize> UserLabels<E, N> {
     ///
     /// Missing key (first boot, or persistence cleared) is not an
     /// error — the registry simply stays empty.
-    pub fn load_persist<S: KvBlobStore>(&self, mut store: S, buf: &mut [u8]) -> Result<(), Error> {
+    fn load_persist<S: KvBlobStore>(&self, mut store: S, buf: &mut [u8]) -> Result<(), Error> {
         let Some(data) = store.load(USER_LABELS_KEY, buf)? else {
             // No prior persistence — reset to empty so re-calling
             // `load_persist` after a `remove` of the key behaves
@@ -220,7 +220,7 @@ impl<const E: usize, const N: usize> UserLabels<E, N> {
     /// Called on factory reset via the [`LifecycleOp::FactoryReset`] lifecycle
     /// operation delivered to the [`UserLabelHandler`] instance(s) borrowing
     /// this registry.
-    pub fn reset_persist<S: KvBlobStore>(&self, mut store: S, buf: &mut [u8]) -> Result<(), Error> {
+    fn reset_persist<S: KvBlobStore>(&self, mut store: S, buf: &mut [u8]) -> Result<(), Error> {
         self.state.lock(|cell| cell.borrow_mut().clear());
 
         store.remove(USER_LABELS_KEY, buf)
